@@ -1,6 +1,6 @@
 """
 ChatGPT 批量自动注册工具 v2.0 - 模块化版本
-使用 Skymail 临时邮箱，并发自动注册 ChatGPT 账号
+使用 yyds-mail 临时邮箱，并发自动注册 ChatGPT 账号
 """
 
 import sys
@@ -29,7 +29,7 @@ def register_one_account(idx, total, skymail_client, token_manager, oauth_client
     Args:
         idx: 账号序号
         total: 总账号数
-        skymail_client: Skymail 客户端
+        skymail_client: 邮箱客户端
         token_manager: Token 管理器
         oauth_client: OAuth 客户端
         config: 配置字典
@@ -49,7 +49,7 @@ def register_one_account(idx, total, skymail_client, token_manager, oauth_client
         
         try:
             # 1. 创建临时邮箱
-            print(f"{tag} 创建 Skymail 临时邮箱...")
+            print(f"{tag} 创建 yyds-mail 临时邮箱...")
             email, mail_token = skymail_client.create_temp_email()
             print(f"{tag} 邮箱: {email}")
             
@@ -167,7 +167,7 @@ def main():
     
     print("=" * 60)
     print("  ChatGPT 批量自动注册工具 v2.0 (模块化版本)")
-    print("  使用 Skymail 临时邮箱")
+    print("  使用 yyds-mail 临时邮箱")
     print("=" * 60)
     
     # 加载配置
@@ -179,7 +179,7 @@ def main():
     if args.no_oauth:
         config['enable_oauth'] = False
     
-    # 初始化 Skymail 客户端
+    # 初始化邮箱客户端
     skymail_client = init_skymail_client(config)
     
     # 初始化 Token 管理器
@@ -196,7 +196,7 @@ def main():
     print(f"  注册数量: {total_accounts}")
     print(f"  并发数: {max_workers}")
     print(f"  输出文件: {output_file}")
-    print(f"  Skymail API: {skymail_client.api_base}")
+    print(f"  Mail API: {skymail_client.api_base}")
     print(f"  Token 目录: {token_manager.token_dir}")
     print(f"  启用 OAuth: {enable_oauth}")
     print()

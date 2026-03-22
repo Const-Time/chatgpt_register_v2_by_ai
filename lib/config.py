@@ -11,6 +11,9 @@ def load_config():
     config = {
         "total_accounts": 3,
         "concurrent_workers": 1,
+        "yydsmail_api_base": "https://maliapi.215.im",
+        "yydsmail_api_key": "",
+        "yydsmail_domains": [],
         "skymail_admin_email": "",
         "skymail_admin_password": "",
         "proxy": "",
@@ -40,6 +43,8 @@ def load_config():
 
     # 环境变量优先级更高
     env_mappings = {
+        "YYDSMAIL_API_BASE": "yydsmail_api_base",
+        "YYDSMAIL_API_KEY": "yydsmail_api_key",
         "SKYMAIL_ADMIN_EMAIL": "skymail_admin_email",
         "SKYMAIL_ADMIN_PASSWORD": "skymail_admin_password",
         "PROXY": "proxy",

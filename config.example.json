@@ -1,7 +1,7 @@
 {
-    "skymail_admin_email": "admin@example.com",
-    "skymail_admin_password": "your_password_here",
-    "skymail_domains": [],
+    "yydsmail_api_base": "https://maliapi.215.im",
+    "yydsmail_api_key": "AC-your_api_key",
+    "yydsmail_domains": [],
     "proxy": "http://127.0.0.1:7890",
     "output_file": "registered_accounts.txt",
     "enable_oauth": true,

@@ -1,6 +1,6 @@
 # ChatGPT / Codex 自动注册工具 v2.0
 
-基于 Skymail 自建邮箱服务的 Codex 自动注册与 OAuth Token 生成工具集。
+基于 yyds-mail 临时邮箱 API 的 Codex 自动注册与 OAuth Token 生成工具集。
 
 ## ✨ v2.0 重大更新
 
@@ -21,7 +21,7 @@
 .
 ├── lib/                          # 核心库模块
 │   ├── config.py                 # 配置加载
-│   ├── skymail_client.py         # Skymail 邮箱客户端
+│   ├── skymail_client.py         # yyds-mail 邮箱客户端适配层
 │   ├── chatgpt_client.py         # ChatGPT 注册客户端
 │   ├── oauth_client.py           # OAuth 登录客户端
 │   ├── sentinel_token.py         # Sentinel Token 生成器
@@ -34,8 +34,8 @@
 
 ## 功能特性
 
-- 🚀 使用 Skymail 自建邮箱服务自动创建临时邮箱
-- 🌐 支持多个域名后缀：在config.json里面配置
+- 🚀 使用 yyds-mail API 自动创建临时邮箱
+- 🌐 支持指定域名列表，或自动拉取公开域名
 - 🤖 自动注册 ChatGPT 账号并获取验证码
 - 🔑 自动生成 OAuth Token（Access Token / Refresh Token）
 - ⚡ 支持高并发注册（推荐 2-5 线程）
@@ -46,7 +46,7 @@
 ## 环境要求
 
 - Python 3.7+
-- Skymail 自建邮箱服务（需要管理员账号）
+- yyds-mail API Key
 - 代理（可选，用于访问 OpenAI 服务）
 
 ## 安装依赖
@@ -61,9 +61,9 @@ pip install curl_cffi
 
 ```json
 {
-    "skymail_admin_email": "admin@example.com",
-    "skymail_admin_password": "your_password_here",
-    "skymail_domains": [],
+   "yydsmail_api_base": "https://maliapi.215.im",
+   "yydsmail_api_key": "AC-your_api_key",
+   "yydsmail_domains": [],
     "proxy": "http://127.0.0.1:7890",
     "output_file": "registered_accounts.txt",
     "enable_oauth": true,
@@ -80,16 +80,20 @@ pip install curl_cffi
 
 ### 重要配置项说明
 
-1. **skymail_admin_email** 和 **skymail_admin_password**：
-   - Skymail 管理员账号
-   - API 地址自动从邮箱域名提取
-   - 程序启动时自动生成 API Token
+1. **yydsmail_api_base** 和 **yydsmail_api_key**：
+   - yyds-mail API 地址和 API Key
+   - 使用 `X-API-Key` 创建临时邮箱
+   - 每个临时邮箱会缓存独立 temp token 用于后续读信
 
-2. **proxy**：
+2. **yydsmail_domains**：
+   - 可选配置
+   - 为空时，程序会自动请求 `/v1/domains` 获取公开域名
+
+3. **proxy**：
    - 代理地址（可选）
    - 格式：`http://host:port` 或 `socks5://host:port`
 
-3. **enable_oauth** 和 **oauth_required**：
+4. **enable_oauth** 和 **oauth_required**：
    - `enable_oauth`: 是否启用 OAuth 登录
    - `oauth_required`: OAuth 失败时是否视为注册失败
 
@@ -130,9 +134,9 @@ python chatgpt_register_v2.py -n 10 -w 5 --no-oauth
 ## 工作原理
 
 ### 1. 邮箱创建
-- 随机选择域名
-- 生成随机前缀（6-10位字母数字组合）
-- 组合成临时邮箱地址
+- 调用 yyds-mail 的 `/v1/accounts` 创建临时邮箱
+- 优先使用配置中的域名；未配置时自动获取公开域名
+- 缓存返回的 temp token，后续读信直接使用该 token
 
 ### 2. 账号注册
 - 访问 ChatGPT 注册页面
@@ -164,10 +168,10 @@ python chatgpt_register_v2.py -n 10 -w 5 --no-oauth
 
 ## 注意事项
 
-### 1. Skymail 服务
-- 需要自己搭建 Skymail 邮箱服务
-- 确保 Skymail 服务可正常访问
-- 管理员账号需要有足够权限
+### 1. yyds-mail 服务
+- 需要可用的 yyds-mail API Key
+- 默认 API 地址为 `https://maliapi.215.im`
+- 如果指定自定义域名，需确认该域名已在服务端可用
 
 ### 2. 代理设置
 - 如果在国内使用，建议配置代理

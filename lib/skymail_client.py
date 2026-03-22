@@ -1,154 +1,220 @@
 """
-Skymail 邮箱客户端模块
+yyds-mail 邮箱客户端适配模块
 """
 
+import random
+import re
+import string
 import sys
 import time
-import random
-import string
-import re
+
+import requests
 
 
 class SkymailClient:
-    """Skymail 邮箱服务客户端"""
+    """兼容旧接口的 yyds-mail 邮箱客户端。"""
 
-    def __init__(self, admin_email, admin_password, api_base=None, proxy=None, domains=None):
+    def __init__(self, api_key, api_base=None, proxy=None, domains=None):
         """
-        初始化 Skymail 客户端
-        
+        初始化 yyds-mail 客户端。
+
         Args:
-            admin_email: 管理员邮箱
-            admin_password: 管理员密码
-            api_base: API 基础地址（可选，默认从邮箱域名提取）
+            api_key: yyds-mail API Key
+            api_base: API 基础地址
             proxy: 代理地址（可选）
-            domains: 可用域名列表（必须）
+            domains: 可选域名列表
         """
-        self.admin_email = admin_email
-        self.admin_password = admin_password
-        
-        # 从管理员邮箱提取 API 域名
-        if api_base:
-            self.api_base = api_base.rstrip("/")
-        elif admin_email and "@" in admin_email:
-            self.api_base = f"https://{admin_email.split('@')[1]}"
-        else:
-            self.api_base = ""
-        
+        self.api_key = (api_key or "").strip()
+        self.api_base = (api_base or "https://maliapi.215.im").rstrip("/")
         self.proxy = proxy
         self.api_token = None
-        
-        # 可用域名列表（必须从配置文件传入）
-        if not domains or not isinstance(domains, list) or len(domains) == 0:
-            raise Exception("❌ 错误: 未配置 skymail_domains，请在 config.json 中设置域名列表")
-        
-        self.domains = domains
+        self.domains = [domain for domain in (domains or []) if isinstance(domain, str) and domain.strip()]
+        self._used_codes = set()
+        self._mail_tokens = {}
+        self._account_ids = {}
+
+    def _build_session(self):
+        session = requests.Session()
+        if self.proxy:
+            session.proxies = {"http": self.proxy, "https": self.proxy}
+        return session
+
+    def _api_headers(self, use_api_key=False, bearer_token=None):
+        headers = {"Accept": "application/json"}
+        if use_api_key:
+            headers["X-API-Key"] = self.api_token
+        if bearer_token:
+            headers["Authorization"] = f"Bearer {bearer_token}"
+        return headers
+
+    def _fetch_available_domains(self):
+        session = self._build_session()
+        res = session.get(
+            f"{self.api_base}/v1/domains",
+            headers=self._api_headers(),
+            timeout=15,
+            verify=False
+        )
+
+        if res.status_code != 200:
+            raise Exception(f"获取域名失败: {res.status_code} - {res.text[:200]}")
+
+        data = res.json()
+        if not data.get("success"):
+            raise Exception(data.get("error") or "获取域名失败")
+
+        domains = []
+        for item in data.get("data", []):
+            domain = item.get("domain") if isinstance(item, dict) else None
+            if domain:
+                domains.append(domain)
+        return domains
+
+    def _normalize_message(self, message):
+        text = message.get("text") or ""
+        html = message.get("html") or []
+        if isinstance(html, list):
+            html_content = "\n".join(part for part in html if isinstance(part, str))
+        elif isinstance(html, str):
+            html_content = html
+        else:
+            html_content = ""
+
+        content = text or html_content
+        normalized = dict(message)
+        normalized["emailId"] = message.get("id") or message.get("emailId")
+        normalized["content"] = content
+        normalized["text"] = text or html_content
+        return normalized
+
+    def _fetch_message_detail(self, message_id, token=None):
+        session = self._build_session()
+        headers = self._api_headers(use_api_key=not token, bearer_token=token)
+        res = session.get(
+            f"{self.api_base}/v1/messages/{message_id}",
+            headers=headers,
+            timeout=15,
+            verify=False
+        )
+
+        if res.status_code != 200:
+            return None
+
+        data = res.json()
+        if not data.get("success"):
+            return None
+        detail = data.get("data") or {}
+        if not isinstance(detail, dict):
+            return None
+        return self._normalize_message(detail)
 
     def generate_token(self):
-        """自动生成 Skymail API Token"""
-        if not self.admin_email or not self.admin_password:
-            print("⚠️ 未配置 Skymail 管理员账号")
+        """兼容旧调用，直接校验并缓存 yyds-mail API Key。"""
+        if not self.api_key:
+            print("⚠️ 未配置 yyds-mail API Key")
             return None
-        
-        if not self.api_base:
-            print("⚠️ 无法从管理员邮箱提取 API 域名")
-            return None
-        
-        try:
-            import requests
-            
-            session = requests.Session()
-            if self.proxy:
-                session.proxies = {"http": self.proxy, "https": self.proxy}
-            
-            res = session.post(
-                f"{self.api_base}/api/public/genToken",
-                json={
-                    "email": self.admin_email,
-                    "password": self.admin_password
-                },
-                headers={"Content-Type": "application/json"},
-                timeout=15,
-                verify=False
-            )
-            
-            if res.status_code == 200:
-                data = res.json()
-                if data.get("code") == 200:
-                    token = data.get("data", {}).get("token")
-                    if token:
-                        print(f"✅ 成功生成 Skymail API Token")
-                        self.api_token = token
-                        return token
-            
-            print(f"⚠️ 生成 Skymail Token 失败: {res.status_code} - {res.text[:200]}")
-        except Exception as e:
-            print(f"⚠️ 生成 Skymail Token 异常: {e}")
-        
-        return None
+
+        self.api_token = self.api_key
+        print("✅ 已加载 yyds-mail API Key")
+        return self.api_token
 
     def create_temp_email(self):
         """
-        创建 Skymail 临时邮箱
-        
+        创建 yyds-mail 临时邮箱。
+
         Returns:
-            tuple: (email, email) - 邮箱地址和 token（在 Skymail 中 token 就是邮箱地址）
+            tuple: (email, token) - 邮箱地址和临时 token
         """
         if not self.api_token:
-            raise Exception("SKYMAIL_API_TOKEN 未设置，无法创建临时邮箱")
+            raise Exception("YYDSMAIL_API_KEY 未设置，无法创建临时邮箱")
 
         try:
-            # 随机选择一个域名
-            domain = random.choice(self.domains)
-            
-            # 生成随机前缀（6-10位字母数字组合）
+            available_domains = self.domains or self._fetch_available_domains()
+            domain = random.choice(available_domains) if available_domains else None
             prefix_length = random.randint(6, 10)
             prefix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=prefix_length))
-            
-            email = f"{prefix}@{domain}"
-            
-            # Skymail API 不需要预先创建邮箱，直接使用即可
-            return email, email
+
+            payload = {}
+            if domain:
+                payload["domain"] = domain
+                payload["address"] = prefix
+
+            session = self._build_session()
+            res = session.post(
+                f"{self.api_base}/v1/accounts",
+                json=payload,
+                headers=self._api_headers(use_api_key=True),
+                timeout=15,
+                verify=False
+            )
+
+            if res.status_code != 200:
+                raise Exception(f"{res.status_code} - {res.text[:200]}")
+
+            data = res.json()
+            if not data.get("success"):
+                raise Exception(data.get("error") or "创建临时邮箱失败")
+
+            account = data.get("data") or {}
+            email = account.get("address")
+            temp_token = account.get("token")
+            account_id = account.get("id")
+
+            if not email or not temp_token:
+                raise Exception(f"响应缺少邮箱或 token: {account}")
+
+            self._mail_tokens[email] = temp_token
+            if account_id:
+                self._account_ids[email] = account_id
+
+            return email, temp_token
 
         except Exception as e:
-            raise Exception(f"Skymail 创建邮箱失败: {e}")
+            raise Exception(f"yyds-mail 创建邮箱失败: {e}")
 
     def fetch_emails(self, email):
         """
-        从 Skymail 获取邮件列表
-        
+        从 yyds-mail 获取邮件列表及详情。
+
         Args:
             email: 邮箱地址
-            
+
         Returns:
             list: 邮件列表
         """
         try:
-            import requests
-            
-            session = requests.Session()
-            if self.proxy:
-                session.proxies = {"http": self.proxy, "https": self.proxy}
-
-            res = session.post(
-                f"{self.api_base}/api/public/emailList",
-                json={
-                    "toEmail": email,
-                    "timeSort": "desc",
-                    "num": 1,
-                    "size": 20
-                },
-                headers={
-                    "Authorization": self.api_token,
-                    "Content-Type": "application/json"
-                },
+            temp_token = self._mail_tokens.get(email)
+            session = self._build_session()
+            headers = self._api_headers(use_api_key=not temp_token, bearer_token=temp_token)
+            res = session.get(
+                f"{self.api_base}/v1/messages",
+                params={"address": email, "limit": 10},
+                headers=headers,
                 timeout=15,
                 verify=False
             )
 
-            if res.status_code == 200:
-                data = res.json()
-                if data.get("code") == 200:
-                    return data.get("data", [])
+            if res.status_code != 200:
+                return []
+
+            data = res.json()
+            if not data.get("success"):
+                return []
+
+            messages = (data.get("data") or {}).get("messages", [])
+            details = []
+            for item in messages:
+                if not isinstance(item, dict):
+                    continue
+                message_id = item.get("id")
+                if not message_id:
+                    continue
+
+                detail = self._fetch_message_detail(message_id, token=temp_token)
+                if detail:
+                    details.append(detail)
+
+            return details
             return []
         except Exception:
             return []
@@ -239,37 +305,44 @@ class SkymailClient:
 
 def init_skymail_client(config):
     """
-    初始化 Skymail 客户端并生成 Token
-    
+    初始化 yyds-mail 客户端。
+
     Args:
         config: 配置字典
-        
+
     Returns:
         SkymailClient: 初始化好的客户端实例
     """
-    admin_email = config.get("skymail_admin_email", "")
-    admin_password = config.get("skymail_admin_password", "")
+    api_key = config.get("yydsmail_api_key", "") or config.get("skymail_admin_password", "")
+    api_base = config.get("yydsmail_api_base", "") or config.get("skymail_api_base", "")
     proxy = config.get("proxy", "")
-    domains = config.get("skymail_domains", None)
-    
-    if not admin_email or not admin_password:
-        print("❌ 错误: 未配置 Skymail 管理员账号")
-        print("   请在 config.json 中设置 skymail_admin_email 和 skymail_admin_password")
+    domains = config.get("yydsmail_domains", None)
+    if domains is None:
+        domains = config.get("skymail_domains", None)
+
+    if not api_key:
+        print("❌ 错误: 未配置 yyds-mail API Key")
+        print("   请在 config.json 中设置 yydsmail_api_key")
         sys.exit(1)
-    
-    if not domains or not isinstance(domains, list) or len(domains) == 0:
-        print("❌ 错误: 未配置 skymail_domains")
-        print("   请在 config.json 中设置域名列表，例如: \"skymail_domains\": [\"admin.example.com\"]")
+
+    if domains is not None and not isinstance(domains, list):
+        print("❌ 错误: yydsmail_domains 必须为数组")
         sys.exit(1)
-    
-    client = SkymailClient(admin_email, admin_password, proxy=proxy, domains=domains)
-    
-    print(f"🔑 正在生成 Skymail API Token (API: {client.api_base})...")
-    print(f"📧 可用域名: {', '.join(domains)}")
+
+    if isinstance(domains, list) and len(domains) == 0:
+        domains = None
+
+    client = SkymailClient(api_key, api_base=api_base, proxy=proxy, domains=domains)
+
+    print(f"🔑 正在加载 yyds-mail API Key (API: {client.api_base})...")
+    if domains:
+        print(f"📧 预设域名: {', '.join(domains)}")
+    else:
+        print("📧 未预设域名，将在运行时自动获取公开域名")
     token = client.generate_token()
-    
+
     if not token:
-        print("❌ Token 生成失败，无法继续")
+        print("❌ API Key 加载失败，无法继续")
         sys.exit(1)
-    
+
     return client
