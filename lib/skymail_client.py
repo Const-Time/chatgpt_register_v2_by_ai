@@ -8,7 +8,10 @@ import string
 import sys
 import time
 
-import requests
+try:
+    from curl_cffi import requests as http_requests
+except ImportError:
+    import requests as http_requests
 
 
 class SkymailClient:
@@ -34,7 +37,7 @@ class SkymailClient:
         self._account_ids = {}
 
     def _build_session(self):
-        session = requests.Session()
+        session = http_requests.Session()
         if self.proxy:
             session.proxies = {"http": self.proxy, "https": self.proxy}
         return session
@@ -47,6 +50,9 @@ class SkymailClient:
             headers["Authorization"] = f"Bearer {bearer_token}"
         return headers
 
+    def _is_success_status(self, status_code):
+        return 200 <= status_code < 300
+
     def _fetch_available_domains(self):
         session = self._build_session()
         res = session.get(
@@ -56,7 +62,7 @@ class SkymailClient:
             verify=False
         )
 
-        if res.status_code != 200:
+        if not self._is_success_status(res.status_code):
             raise Exception(f"获取域名失败: {res.status_code} - {res.text[:200]}")
 
         data = res.json()
@@ -97,7 +103,7 @@ class SkymailClient:
             verify=False
         )
 
-        if res.status_code != 200:
+        if not self._is_success_status(res.status_code):
             return None
 
         data = res.json()
@@ -148,7 +154,7 @@ class SkymailClient:
                 verify=False
             )
 
-            if res.status_code != 200:
+            if not self._is_success_status(res.status_code):
                 raise Exception(f"{res.status_code} - {res.text[:200]}")
 
             data = res.json()
@@ -194,7 +200,7 @@ class SkymailClient:
                 verify=False
             )
 
-            if res.status_code != 200:
+            if not self._is_success_status(res.status_code):
                 return []
 
             data = res.json()

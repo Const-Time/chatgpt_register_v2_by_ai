@@ -55,6 +55,12 @@
 pip install curl_cffi
 ```
 
+如果你不使用 `curl_cffi`，也可以安装 `requests` 作为后备 HTTP 库：
+
+```bash
+pip install requests
+```
+
 ## 配置说明
 
 复制 `config.example.json` 为 `config.json` 并修改配置：
